@@ -6,14 +6,57 @@
         "httpMethod": "POST",
         "path": "finance",
         "responseMode": "responseNode",
-        "options": {}
+        "options": {
+          "rawBody": true
+        }
       },
       "id": "89800975-b38f-46e1-a3d3-46416e7cbed4",
       "name": "Receive Slack Command",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [0, 96],
-      "webhookId": "YOUR_WEBHOOK_ID"
+      "position": [0, 192],
+      "webhookId": "YOUR_WEBHOOK_ID_HERE"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const crypto = require('crypto');\n\nconst headers = $input.item.json.headers || {};\nconst rawBody = $input.item.json.rawBody || '';\nconst signingSecret = $env.SLACK_SIGNING_SECRET || '';\n\nconst timestamp = String(headers['x-slack-request-timestamp'] || '');\nconst slackSig = String(headers['x-slack-signature'] || '');\n\n// Reject if timestamp is more than 5 minutes old (replay attack prevention)\nconst now = Math.floor(Date.now() / 1000);\nif (!timestamp || Math.abs(now - parseInt(timestamp)) > 300) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\n// Fail closed if signing secret not configured\nif (!signingSecret) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\nconst sigBasestring = 'v0:' + timestamp + ':' + rawBody;\nconst expectedSig = 'v0=' + crypto.createHmac('sha256', signingSecret)\n  .update(sigBasestring, 'utf8')\n  .digest('hex');\n\nlet valid = false;\ntry {\n  valid = crypto.timingSafeEqual(\n    Buffer.from(expectedSig, 'utf8'),\n    Buffer.from(slackSig, 'utf8')\n  );\n} catch (e) {\n  valid = false;\n}\n\nreturn { json: { ...$input.item.json, signature_valid: valid } };"
+      },
+      "id": "e44281a7-0b8d-44ac-8558-68e7eb337a3c",
+      "name": "Verify Slack Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 192]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.signature_valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "56743c2a-5380-4fbe-94c3-30ae526f5fc5",
+      "name": "Signature Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [448, 192]
     },
     {
       "parameters": {
@@ -28,7 +71,23 @@
       "name": "Acknowledge Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [224, 96]
+      "position": [672, 96]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "error": "Invalid request signature"
+        },
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "id": "af8a363c-3532-492a-8fde-f1b465731eb0",
+      "name": "Reject Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [672, 288]
     },
     {
       "parameters": {
@@ -66,7 +125,7 @@
       "name": "Prepare Claude Request",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [448, 96]
+      "position": [896, 96]
     },
     {
       "parameters": {
@@ -92,26 +151,8 @@
       "name": "Ask Claude",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [672, 96],
+      "position": [1120, 96],
       "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $('Prepare Claude Request').item.json.response_url }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": {
-          "response_type": "in_channel",
-          "text": ":x: Finance Assistant hit an error. Please try again or contact j.okafor@hartwellbuilding.co.uk"
-        },
-        "options": {}
-      },
-      "id": "9982a50a-1168-477d-b3ab-0bcb0a123853",
-      "name": "Post Error to Slack",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [896, 192]
     },
     {
       "parameters": {
@@ -137,7 +178,7 @@
       "name": "Format Answer",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [896, 0]
+      "position": [1344, 0]
     },
     {
       "parameters": {
@@ -152,25 +193,65 @@
       "name": "Post Answer to Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [1120, 0]
+      "position": [1568, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Prepare Claude Request').item.json.response_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": {
+          "response_type": "in_channel",
+          "text": ":x: Finance Assistant hit an error. Please try again or contact j.okafor@hartwellbuilding.co.uk"
+        },
+        "options": {}
+      },
+      "id": "9982a50a-1168-477d-b3ab-0bcb0a123853",
+      "name": "Post Error to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1344, 192]
     },
     {
       "parameters": {
         "content": "## Slack 3-Second Timeout Pattern\n\nSlack requires a 200 response within 3 seconds or the user sees a timeout error.\n\n**How this works:** The \"Acknowledge Request\" node fires immediately and releases the Slack connection. The workflow then calls Claude and posts the real answer asynchronously to Slack's `response_url` — a temporary URL Slack provides for delayed responses.",
-        "height": 168,
-        "width": 620,
+        "height": 200,
+        "width": 524,
         "color": 3
       },
-      "id": "a5035b14-5647-427e-b5c8-cbd2951e3428",
-      "name": "Sticky Note",
+      "id": "99aa2631-524a-4604-ad9f-41dc41d61a30",
+      "name": "Sticky Note — Timeout Pattern",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [32, -176]
+      "position": [16, -48]
+    },
+    {
+      "parameters": {
+        "content": "## Slack Signature Verification\n\nEvery incoming request is verified against the Slack signing secret using HMAC-SHA256 before any processing occurs.\n\nRequires `SLACK_SIGNING_SECRET` set as an n8n environment variable (from api.slack.com → your app → Basic Information → Signing Secret).\n\nRequests with invalid signatures or timestamps older than 5 minutes are rejected with HTTP 403.",
+        "height": 180,
+        "width": 748,
+        "color": 5
+      },
+      "id": "fc0a3a07-a0c3-4139-b20a-bf4905613a19",
+      "name": "Sticky Note — Signature Verification",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [960, 368]
     }
   ],
   "connections": {
     "Receive Slack Command": {
-      "main": [[{ "node": "Acknowledge Request", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Verify Slack Signature", "type": "main", "index": 0 }]]
+    },
+    "Verify Slack Signature": {
+      "main": [[{ "node": "Signature Valid", "type": "main", "index": 0 }]]
+    },
+    "Signature Valid": {
+      "main": [
+        [{ "node": "Acknowledge Request", "type": "main", "index": 0 }],
+        [{ "node": "Reject Request", "type": "main", "index": 0 }]
+      ]
     },
     "Acknowledge Request": {
       "main": [[{ "node": "Prepare Claude Request", "type": "main", "index": 0 }]]
@@ -190,6 +271,7 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "aiBuilderAssisted": true
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
   }
 }
