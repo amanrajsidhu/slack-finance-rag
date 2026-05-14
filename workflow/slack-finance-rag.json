@@ -34,7 +34,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 1
           },
           "conditions": [
@@ -45,7 +45,7 @@
                 "type": "boolean",
                 "operation": "true"
               },
-              "rightValue": ""
+              "rightValue": true
             }
           ],
           "combinator": "and"
@@ -60,11 +60,8 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": {
-          "response_type": "in_channel",
-          "text": ":mag: *Finance Assistant* is looking that up..."
-        },
+        "respondWith": "text",
+        "responseBody": ":mag: *Finance Assistant* is looking that up...",
         "options": {}
       },
       "id": "ba284d35-faa5-43bf-99f9-40e11bca400f",
@@ -75,10 +72,8 @@
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": {
-          "error": "Invalid request signature"
-        },
+        "respondWith": "text",
+        "responseBody": "Invalid request signature",
         "options": {
           "responseCode": 403
         }
@@ -201,10 +196,7 @@
         "url": "={{ $('Prepare Claude Request').item.json.response_url }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": {
-          "response_type": "in_channel",
-          "text": ":x: Finance Assistant hit an error. Please try again or contact j.okafor@hartwellbuilding.co.uk"
-        },
+        "jsonBody": "={{ { \"response_type\": \"in_channel\", \"text\": \":x: Finance Assistant hit an error. Please try again or contact j.okafor@hartwellbuilding.co.uk\" } }}",
         "options": {}
       },
       "id": "9982a50a-1168-477d-b3ab-0bcb0a123853",
