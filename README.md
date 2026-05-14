@@ -74,6 +74,25 @@ All company data is fictional and used for demonstration purposes only.
 
 ---
 
+## Demo Questions
+
+Use questions that are covered by the fictional Hartwell knowledge base. These prompts are good for a live walkthrough:
+
+```text
+/finance who approves invoices over £5k?
+/finance what are our standard payment terms with suppliers?
+/finance when are payment runs processed?
+/finance do I need a purchase order before buying something?
+/finance what is the bank reconciliation deadline?
+/finance when does the month-end pack need to be submitted?
+/finance what is our VAT number?
+/finance can I reclaim VAT on client entertainment?
+```
+
+Questions about revenue, profit, cash balances, or financial statements intentionally return a fallback response because those figures are not included in the demo knowledge base.
+
+---
+
 ## Setup
 
 ### Prerequisites
