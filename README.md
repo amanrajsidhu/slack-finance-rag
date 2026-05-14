@@ -1,6 +1,6 @@
 # Slack Finance RAG Bot
 
-A Slack slash command that lets staff ask finance questions and get instant, sourced answers from a company knowledge base — built with n8n and Claude AI.
+A Slack slash command that lets staff ask finance questions and get instant, sourced answers from a company knowledge base — built using n8n and Claude AI.
 
 Type `/finance who approves invoices over £5k?` in Slack and get back a cited answer in seconds.
 
