@@ -1,2 +1,8 @@
 .env
+*.env
 claude-code-build-context.md
+CLAUDE.md
+.claude/
+.codex/
+*.log
+*_backup.json

@@ -19,14 +19,38 @@
     },
     {
       "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "slack_signing_secret",
+              "value": "={{ $env.SLACK_SIGNING_SECRET }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {
+          "stripBinary": false
+        }
+      },
+      "id": "a1d2d285-3f5d-4fef-8d4c-f7bf45f0cf18",
+      "name": "Load Slack Signing Secret",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [224, 192]
+    },
+    {
+      "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const crypto = require('crypto');\n\nconst headers = $input.item.json.headers || {};\nconst rawBody = $input.item.json.rawBody || '';\nconst signingSecret = $env.SLACK_SIGNING_SECRET || '';\n\nconst timestamp = String(headers['x-slack-request-timestamp'] || '');\nconst slackSig = String(headers['x-slack-signature'] || '');\n\n// Reject if timestamp is more than 5 minutes old (replay attack prevention)\nconst now = Math.floor(Date.now() / 1000);\nif (!timestamp || Math.abs(now - parseInt(timestamp)) > 300) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\n// Fail closed if signing secret not configured\nif (!signingSecret) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\nconst sigBasestring = 'v0:' + timestamp + ':' + rawBody;\nconst expectedSig = 'v0=' + crypto.createHmac('sha256', signingSecret)\n  .update(sigBasestring, 'utf8')\n  .digest('hex');\n\nlet valid = false;\ntry {\n  valid = crypto.timingSafeEqual(\n    Buffer.from(expectedSig, 'utf8'),\n    Buffer.from(slackSig, 'utf8')\n  );\n} catch (e) {\n  valid = false;\n}\n\nreturn { json: { ...$input.item.json, signature_valid: valid } };"
+        "jsCode": "const crypto = require('crypto');\n\nconst headers = $input.item.json.headers || {};\nconst rawBody = $input.item.binary?.data?.data\n  ? Buffer.from($input.item.binary.data.data, 'base64').toString('utf8')\n  : ($input.item.json.rawBody || '');\nconst signingSecret = $input.item.json.slack_signing_secret || '';\n\nconst timestamp = String(headers['x-slack-request-timestamp'] || '');\nconst slackSig = String(headers['x-slack-signature'] || '');\n\n// Reject if timestamp is more than 5 minutes old (replay attack prevention)\nconst now = Math.floor(Date.now() / 1000);\nif (!timestamp || Math.abs(now - parseInt(timestamp)) > 300) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\n// Fail closed if signing secret or raw body is not available\nif (!signingSecret || !rawBody) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\nconst sigBasestring = 'v0:' + timestamp + ':' + rawBody;\nconst expectedSig = 'v0=' + crypto.createHmac('sha256', signingSecret)\n  .update(sigBasestring, 'utf8')\n  .digest('hex');\n\nlet valid = false;\ntry {\n  valid = crypto.timingSafeEqual(\n    Buffer.from(expectedSig, 'utf8'),\n    Buffer.from(slackSig, 'utf8')\n  );\n} catch (e) {\n  valid = false;\n}\n\nreturn { json: { ...$input.item.json, signature_valid: valid } };"
       },
       "id": "e44281a7-0b8d-44ac-8558-68e7eb337a3c",
       "name": "Verify Slack Signature",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [224, 192]
+      "position": [448, 192]
     },
     {
       "parameters": {
@@ -56,7 +80,7 @@
       "name": "Signature Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [448, 192]
+      "position": [672, 192]
     },
     {
       "parameters": {
@@ -68,7 +92,7 @@
       "name": "Acknowledge Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [672, 96]
+      "position": [896, 96]
     },
     {
       "parameters": {
@@ -82,7 +106,7 @@
       "name": "Reject Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [672, 288]
+      "position": [896, 288]
     },
     {
       "parameters": {
@@ -120,7 +144,7 @@
       "name": "Prepare Claude Request",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [896, 96]
+      "position": [1120, 96]
     },
     {
       "parameters": {
@@ -146,7 +170,7 @@
       "name": "Ask Claude",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [1120, 96],
+      "position": [1344, 96],
       "onError": "continueErrorOutput"
     },
     {
@@ -173,7 +197,7 @@
       "name": "Format Answer",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1344, 0]
+      "position": [1568, 0]
     },
     {
       "parameters": {
@@ -188,7 +212,7 @@
       "name": "Post Answer to Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [1568, 0]
+      "position": [1792, 0]
     },
     {
       "parameters": {
@@ -203,7 +227,7 @@
       "name": "Post Error to Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
-      "position": [1344, 192]
+      "position": [1568, 192]
     },
     {
       "parameters": {
@@ -234,6 +258,9 @@
   ],
   "connections": {
     "Receive Slack Command": {
+      "main": [[{ "node": "Load Slack Signing Secret", "type": "main", "index": 0 }]]
+    },
+    "Load Slack Signing Secret": {
       "main": [[{ "node": "Verify Slack Signature", "type": "main", "index": 0 }]]
     },
     "Verify Slack Signature": {

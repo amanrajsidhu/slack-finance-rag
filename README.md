@@ -101,6 +101,25 @@ All company data is fictional and used for demonstration purposes only.
 
 Copy `.env.example` to `.env` and fill in your values. The `.env` file is gitignored and should never be committed.
 
+For n8n 2.18.x and newer, the Slack HMAC verification Code node also needs Node's `crypto` module to be allowed in the task runner:
+
+```env
+NODE_FUNCTION_ALLOW_BUILTIN=crypto
+SLACK_SIGNING_SECRET=your_slack_signing_secret_here
+```
+
+The workflow reads `SLACK_SIGNING_SECRET` from the n8n environment in a Set node, then passes it into the Code node as item data. This avoids reading `$env` directly inside the Code node, which can be blocked by n8n's task-runner sandbox.
+
+---
+
+## Security Notes
+
+- This repository contains only fictional Hartwell Building Supplies Ltd data.
+- No real Slack tokens, Anthropic keys, n8n credential IDs, MCP tokens, encryption keys, or live webhook URLs are committed.
+- `.env`, local Claude/Codex context files, logs, and workflow backup exports are ignored by git.
+- The exported workflow includes Slack request signing verification using HMAC-SHA256 and a five-minute replay window.
+- Replace all placeholder values with your own local credentials after importing the workflow.
+
 ---
 
 ## Project Notes
