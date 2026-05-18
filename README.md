@@ -17,7 +17,13 @@ Staff type a finance question using the `/finance` slash command. The bot search
 > ✅ Standard payment terms are 30 days from the date of invoice. Different terms must be agreed in writing and approved by the Finance Director.
 > 📋 Source: Supplier Payment Policy (v3.1), Standard Payment Terms
 
-## Demo Screenshots
+## Demo
+
+**Watch it in action**
+
+[![Watch the demo](https://cdn.loom.com/sessions/thumbnails/52153f1cb027435ab6d19c026da6eaef-owner-portrait.jpg)](https://www.loom.com/share/52153f1cb027435ab6d19c026da6eaef)
+
+---
 
 **VAT lookup**
 
