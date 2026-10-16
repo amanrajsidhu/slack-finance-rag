@@ -22,26 +22,13 @@
     },
     {
       "parameters": {
-        "mode": "manual",
-        "assignments": {
-          "assignments": [
-            {
-              "id": "1",
-              "name": "slack_signing_secret",
-              "value": "={{ $env.SLACK_SIGNING_SECRET }}",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {
-          "stripBinary": false
-        }
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $input.item;\nconst headers = input.json.headers || {};\nconst getHeader = (name) => {\n  const wanted = name.toLowerCase();\n  const match = Object.keys(headers).find((key) => key.toLowerCase() === wanted);\n  return match ? String(headers[match] ?? '') : '';\n};\n\nconst timestamp = getHeader('x-slack-request-timestamp');\nconst suppliedSignature = getHeader('x-slack-signature');\nconst binaryBody = input.binary?.data?.data;\nconst rawBody = typeof binaryBody === 'string' && binaryBody.length > 0\n  ? Buffer.from(binaryBody, 'base64').toString('utf8')\n  : (typeof input.json.rawBody === 'string' ? input.json.rawBody : '');\n\nconst parsedTimestamp = Number(timestamp);\nconst now = Math.floor(Date.now() / 1000);\nconst timestampIsValid = /^\\d+$/.test(timestamp)\n  && Number.isSafeInteger(parsedTimestamp)\n  && Math.abs(now - parsedTimestamp) <= 300;\nconst signatureFormatIsValid = /^v0=[0-9a-f]{64}$/.test(suppliedSignature);\nconst prerequisitesValid = timestampIsValid\n  && signatureFormatIsValid\n  && rawBody.length > 0;\n\nreturn {\n  json: {\n    ...input.json,\n    slack_signature_base: `v0:${timestamp}:${rawBody}`,\n    supplied_slack_signature: suppliedSignature,\n    verification_prerequisites_valid: prerequisitesValid,\n  },\n  binary: input.binary,\n};"
       },
       "id": "a1d2d285-3f5d-4fef-8d4c-f7bf45f0cf18",
-      "name": "Load Slack Signing Secret",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
+      "name": "Prepare Slack Verification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         224,
         192
@@ -49,15 +36,39 @@
     },
     {
       "parameters": {
+        "action": "hmac",
+        "binaryData": false,
+        "type": "SHA256",
+        "value": "={{ $json.slack_signature_base }}",
+        "dataPropertyName": "expected_signature_hex",
+        "encoding": "hex"
+      },
+      "id": "2b4651e8-e268-493a-91d0-9b8b90b25022",
+      "name": "Calculate Slack HMAC",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [
+        448,
+        192
+      ],
+      "credentials": {
+        "crypto": {
+          "id": "YOUR_CRYPTO_CREDENTIAL_ID",
+          "name": "Slack Signing Secret - Finance RAG"
+        }
+      }
+    },
+    {
+      "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const crypto = require('crypto');\n\nconst headers = $input.item.json.headers || {};\nconst rawBody = $input.item.binary?.data?.data\n  ? Buffer.from($input.item.binary.data.data, 'base64').toString('utf8')\n  : ($input.item.json.rawBody || '');\nconst signingSecret = $input.item.json.slack_signing_secret || '';\n\nconst timestamp = String(headers['x-slack-request-timestamp'] || '');\nconst slackSig = String(headers['x-slack-signature'] || '');\n\n// Reject if timestamp is more than 5 minutes old (replay attack prevention)\nconst now = Math.floor(Date.now() / 1000);\nif (!timestamp || Math.abs(now - parseInt(timestamp)) > 300) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\n// Fail closed if signing secret or raw body is not available\nif (!signingSecret || !rawBody) {\n  return { json: { ...$input.item.json, signature_valid: false } };\n}\n\nconst sigBasestring = 'v0:' + timestamp + ':' + rawBody;\nconst expectedSig = 'v0=' + crypto.createHmac('sha256', signingSecret)\n  .update(sigBasestring, 'utf8')\n  .digest('hex');\n\nlet valid = false;\ntry {\n  valid = crypto.timingSafeEqual(\n    Buffer.from(expectedSig, 'utf8'),\n    Buffer.from(slackSig, 'utf8')\n  );\n} catch (e) {\n  valid = false;\n}\n\nreturn { json: { ...$input.item.json, signature_valid: valid } };"
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.item;\nconst json = { ...input.json };\n\nconst expectedSignature = `v0=${String(json.expected_signature_hex || '')}`;\nconst suppliedSignature = String(json.supplied_slack_signature || '');\nlet valid = json.verification_prerequisites_valid === true;\n\nif (valid) {\n  try {\n    const expected = Buffer.from(expectedSignature, 'utf8');\n    const supplied = Buffer.from(suppliedSignature, 'utf8');\n    valid = expected.length === supplied.length\n      && crypto.timingSafeEqual(expected, supplied);\n  } catch (error) {\n    valid = false;\n  }\n}\n\ndelete json.slack_signature_base;\ndelete json.supplied_slack_signature;\ndelete json.verification_prerequisites_valid;\ndelete json.expected_signature_hex;\n\nreturn {\n  json: { ...json, signature_valid: valid },\n  binary: input.binary,\n};"
       },
       "id": "e44281a7-0b8d-44ac-8558-68e7eb337a3c",
       "name": "Verify Slack Signature",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        448,
+        672,
         192
       ]
     },
@@ -90,7 +101,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        672,
+        896,
         192
       ]
     },
@@ -105,7 +116,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        896,
+        1120,
         96
       ]
     },
@@ -122,7 +133,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        896,
+        1120,
         288
       ]
     },
@@ -163,7 +174,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1120,
+        1344,
         96
       ]
     },
@@ -192,7 +203,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1344,
+        1568,
         96
       ],
       "onError": "continueErrorOutput"
@@ -222,7 +233,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1568,
+        1792,
         0
       ]
     },
@@ -240,7 +251,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1792,
+        2016,
         0
       ]
     },
@@ -258,7 +269,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1568,
+        1792,
         192
       ]
     },
@@ -280,7 +291,7 @@
     },
     {
       "parameters": {
-        "content": "## Slack Signature Verification\n\nEvery incoming request is verified against the Slack signing secret using HMAC-SHA256 before any processing occurs.\n\nRequires `SLACK_SIGNING_SECRET` set as an n8n environment variable (from api.slack.com \u00e2\u2020\u2019 your app \u00e2\u2020\u2019 Basic Information \u00e2\u2020\u2019 Signing Secret).\n\nRequests with invalid signatures or timestamps older than 5 minutes are rejected with HTTP 403.",
+        "content": "## Slack Signature Verification\n\nEvery incoming request is verified with HMAC-SHA256 before any processing occurs.\n\nThe signing secret remains encrypted inside the n8n Crypto credential named `Slack Signing Secret - Finance RAG`; it is never copied into workflow data or stored in the repository.\n\nRequests with malformed or invalid signatures, missing raw bodies, or timestamps older than 5 minutes are rejected with HTTP 403.",
         "height": 180,
         "width": 748,
         "color": 5
@@ -290,7 +301,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        960,
+        1184,
         368
       ]
     }
@@ -300,14 +311,25 @@
       "main": [
         [
           {
-            "node": "Load Slack Signing Secret",
+            "node": "Prepare Slack Verification",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Slack Signing Secret": {
+    "Prepare Slack Verification": {
+      "main": [
+        [
+          {
+            "node": "Calculate Slack HMAC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Slack HMAC": {
       "main": [
         [
           {
